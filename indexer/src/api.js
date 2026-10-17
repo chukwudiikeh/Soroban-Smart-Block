@@ -1,4 +1,5 @@
 import { logger } from "./logger.js";
+import { resolveAssetIdentity } from "./assetIdentity.js";
 import express from "express";
 import http from "http";
 import path from "path";
@@ -2734,6 +2735,26 @@ export function createApi({ logDestination, dbOverride } = {}) {
       const asset = await db.getAsset(code, issuer);
       if (!asset) return res.status(404).json({ error: "Asset not found" });
       res.json(serializeAsset(asset));
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/assets/:issuer/:code/identity — identity evidence for a classic
+  // asset. Same-code assets from other issuers are listed but never merged (#1066).
+  app.get("/api/assets/:issuer/:code/identity", async (req, res) => {
+    try {
+      const { issuer, code } = req.params;
+      const asset = await db.getAsset(code, issuer);
+      if (!asset) return res.status(404).json({ error: "Asset not found" });
+      const others = await db.getAssetsByCode(code);
+      const candidates = [
+        { code, issuer, source: "assets_registry" },
+        ...others.map((row) => ({ code: row.code, issuer: row.issuer, source: "assets_registry" })),
+      ];
+      const { identities, skipped } = resolveAssetIdentity(candidates);
+      const identity = identities.find((i) => i.code === code && i.issuer === issuer);
+      res.json({ code, issuer, identity: identity ?? null, skipped });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

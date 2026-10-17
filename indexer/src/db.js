@@ -3041,6 +3041,12 @@ export const db = {
     return rows[0] ?? null;
   },
 
+  /** All issuers that have published an asset with this code (#1066). */
+  async getAssetsByCode(code) {
+    const { rows } = await pool.query("SELECT code, issuer FROM assets WHERE code = $1 ORDER BY issuer", [code]);
+    return rows;
+  },
+
   async upsertAsset({ code, issuer, name, domain, logo_url, decimals }) {
     const { rows } = await pool.query(
       `INSERT INTO assets (code, issuer, name, domain, logo_url, decimals)
