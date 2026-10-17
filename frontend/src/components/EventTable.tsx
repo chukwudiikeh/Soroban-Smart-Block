@@ -1,15 +1,16 @@
-import { useMemo, useRef, memo } from "react";
+import { useMemo, useRef, useLayoutEffect, memo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueries } from "@tanstack/react-query";
 import { api } from "../api";
 import type { ContractMeta, DecodedEvent } from "../api";
-import { useVirtualList } from "../hooks/useVirtualList";
+import { useVirtualList, ROW_HEIGHT } from "../hooks/useVirtualList";
 import FiatValue from "./FiatValue";
 import AssetLogo from "./AssetLogo";
 import CopyableAddress from "./CopyableAddress";
 import { getGasAlert } from "./GasLimitAlert";
 import ProtocolBadge from "./ProtocolBadge";
 import { addressRoute, truncateAddress, isAccountAddress, isContractAddress, isMuxedAddress } from "../utils/strkey";
+import { readFeedScroll, saveFeedScroll } from "../utils/feedViewState";
 
 /** Stellar strkey address pattern: G.../C.../M... (56+ chars, base32 alphabet) */
 const ADDRESS_RE = /\b([GCM][A-Z2-7]{55,})\b/g;
@@ -81,6 +82,8 @@ function parseClassicAsset(ev: DecodedEvent): { code: string; issuer: string | n
 interface Props {
   events: DecodedEvent[];
   onReachEnd?: () => void;
+  /** Filter query string used to remember and restore the scroll offset (#1034). */
+  scrollKey?: string;
 }
 
 const FunctionBadge = memo(function FunctionBadge({ fn, isClassic }: { fn: string; isClassic?: boolean }) {
@@ -302,10 +305,21 @@ const EventRow = memo(function EventRow({ ev, contractMeta }: { ev: DecodedEvent
   );
 });
 
-export default function EventTable({ events, onReachEnd }: Props) {
+export default function EventTable({ events, onReachEnd, scrollKey }: Props) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const { totalHeight, visibleItems } = useVirtualList(events, scrollContainerRef);
   const navigate = useNavigate();
+  const restoredRef = useRef(false);
+  const hasRows = events.length > 0;
+
+  // Restore the saved offset once the rows exist, so the spacer is tall enough
+  // to scroll to it (#1034). Runs at most once per mount.
+  useLayoutEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el || !scrollKey || !hasRows || restoredRef.current) return;
+    restoredRef.current = true;
+    el.scrollTop = readFeedScroll(scrollKey);
+  }, [scrollKey, hasRows]);
 
   // Batch-fetch contract metadata for the badge shown next to each contract
   // name (issue #556) — one request per unique contract on the page, cached
@@ -368,6 +382,7 @@ export default function EventTable({ events, onReachEnd }: Props) {
         }}
         onScroll={(event) => {
           const target = event.currentTarget;
+          if (scrollKey) saveFeedScroll(scrollKey, target.scrollTop);
           if (onReachEnd && target.scrollTop + target.clientHeight >= target.scrollHeight - ROW_HEIGHT * 4) {
             onReachEnd();
           }

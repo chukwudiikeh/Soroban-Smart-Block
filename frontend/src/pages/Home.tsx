@@ -267,6 +267,7 @@ export default function Home() {
         ) : (
           <EventTable
             events={events}
+            scrollKey={searchParams.toString()}
             onReachEnd={hasNextPage && !isFetchingNextPage ? () => void fetchNextPage() : undefined}
           />
         )}
