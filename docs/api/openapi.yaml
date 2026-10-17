@@ -690,6 +690,102 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/contracts/{id}/decode-coverage:
+    get:
+      summary: Per-function decode coverage over a ledger range (Issue #1058)
+      description: |
+        Reports, for each function the contract emitted in the inclusive ledger
+        range, how many events were decoded against an ABI or on-chain spec
+        (decode_status `verified` or `unverified`). Events decoded only by
+        heuristic guessing are not counted as decoded. `decode_share` is a ratio
+        between 0 and 1, rounded to four decimals, or null when there are no events.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Contract ID
+        - name: from_ledger
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+          description: First ledger of the range (inclusive)
+        - name: to_ledger
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+          description: Last ledger of the range (inclusive). Must be >= from_ledger.
+      responses:
+        "200":
+          description: Decode coverage for the range
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [contract_id, from_ledger, to_ledger, total, decoded, decode_share, functions]
+                properties:
+                  contract_id:
+                    type: string
+                  from_ledger:
+                    type: integer
+                  to_ledger:
+                    type: integer
+                  total:
+                    type: integer
+                  decoded:
+                    type: integer
+                  decode_share:
+                    type: number
+                    nullable: true
+                  functions:
+                    type: array
+                    items:
+                      type: object
+                      required: [function, total, decoded, decode_share]
+                      properties:
+                        function:
+                          type: string
+                        total:
+                          type: integer
+                        decoded:
+                          type: integer
+                        decode_share:
+                          type: number
+                          nullable: true
+              example:
+                contract_id: CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
+                from_ledger: 1000
+                to_ledger: 2000
+                total: 7
+                decoded: 6
+                decode_share: 0.8571
+                functions:
+                  - function: transfer
+                    total: 3
+                    decoded: 2
+                    decode_share: 0.6667
+                  - function: mint
+                    total: 4
+                    decoded: 4
+                    decode_share: 1
+        "400":
+          description: from_ledger or to_ledger is missing, not a positive integer, or from_ledger > to_ledger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/admin/abi/import-github:
     post:
       summary: Bulk ABI import from a GitHub repository (Issue #520)

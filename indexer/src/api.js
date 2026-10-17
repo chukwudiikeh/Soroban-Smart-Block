@@ -141,6 +141,7 @@ import {
   verifyResultUrl,
 } from "./jobs/queryJobs.js";
 import { loadResponseValidator, responseValidationMiddleware } from "./openapiValidator.js";
+import { buildDecodeCoverage, DECODED_STATUSES, parseLedgerRange } from "./decodeCoverage.js";
 import { loadSigningKeys, publishedKeys, signEnvelope, wantsSignedResponse, SIGNED_MEDIA_TYPE } from "./signing.js";
 import addFormats from "ajv-formats";
 import {
@@ -2228,6 +2229,24 @@ export function createApi({ logDestination, dbOverride } = {}) {
       };
       res.setHeader("Content-Disposition", `attachment; filename="${req.params.id}.abi.json"`);
       res.json(abi);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/contracts/:id/decode-coverage?from_ledger=&to_ledger= — share of events per
+  // function that decoded against an ABI/spec in the ledger range (Issue #1058).
+  app.get("/api/contracts/:id/decode-coverage", async (req, res) => {
+    const range = parseLedgerRange(req.query);
+    if (range.error) return res.status(400).json({ error: range.error });
+    try {
+      const rows = await db.getDecodeCoverageByFunction(req.params.id, range.from, range.to, DECODED_STATUSES);
+      res.json({
+        contract_id: req.params.id,
+        from_ledger: range.from,
+        to_ledger: range.to,
+        ...buildDecodeCoverage(rows),
+      });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

@@ -2948,6 +2948,22 @@ export const db = {
    * @param {string} contractId
    * @returns {Promise<{ abi_version: number, functions: object[], registered_by: string, min_ledger: number, created_at: string }[]>}
    */
+  // Issue #1058 — per-function counts of events in [fromLedger, toLedger] and how
+  // many of them were decoded against an ABI/spec (see src/decodeCoverage.js).
+  async getDecodeCoverageByFunction(contractId, fromLedger, toLedger, decodedStatuses) {
+    const { rows } = await queryRead(
+      `SELECT function,
+              COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE decode_status = ANY($4::text[]))::int AS decoded
+       FROM events
+       WHERE contract_id = $1 AND ledger BETWEEN $2 AND $3
+       GROUP BY function
+       ORDER BY total DESC, function ASC`,
+      [contractId, fromLedger, toLedger, decodedStatuses],
+    );
+    return rows;
+  },
+
   async getContractAbiHistory(contractId) {
     const { rows } = await pool.query(
       `SELECT abi_version, functions, registered_by, min_ledger, created_at
