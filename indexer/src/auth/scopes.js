@@ -100,6 +100,8 @@ export const ROUTE_SCOPES = {
   "GET /api/contracts/:id/abi": R_CONTRACTS,
   "GET /api/contracts/:id/abi-history": R_CONTRACTS,
   "GET /api/contracts/:id/decode-coverage": R_CONTRACTS,
+  "GET /api/contracts/:id/metadata-corrections": R_CONTRACTS,
+  "POST /api/contracts/:id/metadata-corrections": W_CONTRACTS,
   "GET /api/contracts/:id/build-metadata": R_CONTRACTS,
   "GET /api/contracts/:id/call-graph": R_CONTRACTS,
   "GET /api/contracts/:id/circuit-breaker": R_CONTRACTS,

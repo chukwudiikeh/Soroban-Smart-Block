@@ -142,6 +142,7 @@ import {
 } from "./jobs/queryJobs.js";
 import { loadResponseValidator, responseValidationMiddleware } from "./openapiValidator.js";
 import { buildDecodeCoverage, DECODED_STATUSES, parseLedgerRange } from "./decodeCoverage.js";
+import { validateCorrection } from "./metadataCorrections.js";
 import { loadSigningKeys, publishedKeys, signEnvelope, wantsSignedResponse, SIGNED_MEDIA_TYPE } from "./signing.js";
 import addFormats from "ajv-formats";
 import {
@@ -2247,6 +2248,31 @@ export function createApi({ logDestination, dbOverride } = {}) {
         to_ledger: range.to,
         ...buildDecodeCoverage(rows),
       });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // POST /api/contracts/:id/metadata-corrections — correct a live name/description and
+  // record who changed it and why. Prior contract_versions rows are not modified (Issue #1059).
+  app.post("/api/contracts/:id/metadata-corrections", writeLimiter, requireApiKey, async (req, res) => {
+    const input = validateCorrection(req.body);
+    if (input.error) return res.status(400).json({ error: input.error });
+    try {
+      const actor = req.rateContext?.keyId || "api-key";
+      const correction = await db.correctContractMetadata(req.params.id, { ...input, actor });
+      if (!correction) return res.status(404).json({ error: "Contract not found" });
+      res.status(201).json(correction);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/contracts/:id/metadata-corrections — public, newest first (Issue #1059).
+  app.get("/api/contracts/:id/metadata-corrections", async (req, res) => {
+    try {
+      const corrections = await db.getContractCorrections(req.params.id);
+      res.json({ contract_id: req.params.id, corrections });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

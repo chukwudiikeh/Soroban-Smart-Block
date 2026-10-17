@@ -786,6 +786,106 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/contracts/{id}/metadata-corrections:
+    get:
+      summary: Public metadata correction history (Issue #1059)
+      description: |
+        Lists corrections made to a contract's live name or description, newest
+        first. Each entry records the previous value, the new value, the reason and
+        the API key that made the change. Prior contract_versions snapshots are
+        never rewritten.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Contract ID
+      responses:
+        "200":
+          description: Corrections for the contract (empty array when none)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [contract_id, corrections]
+                properties:
+                  contract_id:
+                    type: string
+                  corrections:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MetadataCorrection"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      summary: Correct a contract's name or description (Issue #1059)
+      description: |
+        Updates the live field and appends a correction record in one atomic
+        statement. The actor is taken from the authenticated API key and cannot be
+        supplied in the body.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Contract ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [field, new_value, reason]
+              properties:
+                field:
+                  type: string
+                  enum: [name, description]
+                new_value:
+                  type: string
+                  description: Max 200 characters for name, 2000 for description
+                reason:
+                  type: string
+                  maxLength: 500
+            example:
+              field: name
+              new_value: Soroban Token
+              reason: Corrects a typo in the registered name
+      responses:
+        "201":
+          description: Correction recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataCorrection"
+        "400":
+          description: Invalid field, value or reason
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid API key
+        "404":
+          description: Contract not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/admin/abi/import-github:
     post:
       summary: Bulk ABI import from a GitHub repository (Issue #520)
@@ -5946,6 +6046,30 @@ components:
           nullable: true
           example: null
 
+    MetadataCorrection:
+      type: object
+      required: [id, contract_id, field, new_value, reason, actor, created_at]
+      properties:
+        id:
+          type: integer
+        contract_id:
+          type: string
+        field:
+          type: string
+          enum: [name, description]
+        old_value:
+          type: string
+          nullable: true
+        new_value:
+          type: string
+        reason:
+          type: string
+        actor:
+          type: string
+          description: API key id that made the correction
+        created_at:
+          type: string
+          format: date-time
     AbiHistoryEntry:
       type: object
       required: [abi_version, functions, registered_by, min_ledger, created_at]
