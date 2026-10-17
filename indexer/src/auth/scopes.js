@@ -83,6 +83,7 @@ export const ROUTE_SCOPES = {
   "GET /api/transactions/:hash/status": R_EVENTS,
   "GET /api/transactions/:hash/status/stream": R_EVENTS,
   "GET /api/tokens/:id/holders": R_EVENTS,
+  "GET /api/tokens/:id/concentration": R_EVENTS,
   "GET /api/tokens/:id/volume": R_EVENTS,
   "GET /api/tokens/:contractId/nfts": R_EVENTS,
   "GET /api/tokens/:contractId/nfts/analytics": R_EVENTS,

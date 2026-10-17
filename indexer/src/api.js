@@ -143,6 +143,7 @@ import {
 import { loadResponseValidator, responseValidationMiddleware } from "./openapiValidator.js";
 import { buildDecodeCoverage, DECODED_STATUSES, parseLedgerRange } from "./decodeCoverage.js";
 import { validateCorrection } from "./metadataCorrections.js";
+import { computeConcentration } from "./holderConcentration.js";
 import { loadSigningKeys, publishedKeys, signEnvelope, wantsSignedResponse, SIGNED_MEDIA_TYPE } from "./signing.js";
 import addFormats from "ajv-formats";
 import {
@@ -2820,6 +2821,28 @@ export function createApi({ logDestination, dbOverride } = {}) {
         decimals,
         total_holders: holders.length,
         holders,
+      });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/tokens/:id/concentration?top=N — top-N share and HHI over the current holder
+  // snapshot (Issue #1061). token_holders keeps no history, so coverage is always "current".
+  app.get("/api/tokens/:id/concentration", async (req, res) => {
+    const top = req.query.top === undefined ? 10 : Number(req.query.top);
+    if (!Number.isInteger(top) || top < 1 || top > 100) {
+      return res.status(400).json({ error: "top must be an integer between 1 and 100" });
+    }
+    try {
+      const rows = await db.getTokenHolders(req.params.id);
+      res.json({
+        contract_id: req.params.id,
+        ...computeConcentration(
+          rows.map((r) => r.balance_raw),
+          top,
+        ),
+        coverage: { source: "token_holders", snapshot: "current", historical: false },
       });
     } catch (e) {
       res.status(500).json({ error: e.message });

@@ -2220,6 +2220,88 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/tokens/{id}/concentration:
+    get:
+      summary: Holder concentration over the current balance snapshot (Issue #1061)
+      description: |
+        Returns the share of total supply held by the top N holders and the
+        Herfindahl-Hirschman index (HHI, 0..10000) computed from holder shares
+        rounded to basis points. Zero, negative and malformed balances are excluded
+        and counted in `invalid_balances`. The source is the current token_holders
+        snapshot only; no historical series is available, indicated by
+        `coverage.historical: false`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Token contract ID
+        - name: top
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Number of largest holders in the top-N window
+      responses:
+        "200":
+          description: Concentration metrics (shares are null when there are no positive balances)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [contract_id, holder_count, total_balance_raw, top, top_share, hhi, invalid_balances, coverage]
+                properties:
+                  contract_id:
+                    type: string
+                  holder_count:
+                    type: integer
+                  total_balance_raw:
+                    type: string
+                  top:
+                    type: integer
+                  top_share:
+                    type: number
+                    nullable: true
+                  hhi:
+                    type: number
+                    nullable: true
+                  invalid_balances:
+                    type: integer
+                  coverage:
+                    type: object
+                    properties:
+                      source:
+                        type: string
+                      snapshot:
+                        type: string
+                      historical:
+                        type: boolean
+              example:
+                contract_id: CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
+                holder_count: 4
+                total_balance_raw: "100"
+                top: 2
+                top_share: 0.5
+                hhi: 2500
+                invalid_balances: 0
+                coverage: { source: token_holders, snapshot: current, historical: false }
+        "400":
+          description: top is not an integer between 1 and 100
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/tokens/{id}/holders:
     get:
       summary: Token holder list for a SEP-41 contract
