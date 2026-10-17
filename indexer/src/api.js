@@ -1,5 +1,6 @@
 import { logger } from "./logger.js";
 import { resolveAssetIdentity } from "./assetIdentity.js";
+import { buildSupplyHistory } from "./assetSupplyHistory.js";
 import express from "express";
 import http from "http";
 import path from "path";
@@ -2735,6 +2736,25 @@ export function createApi({ logDestination, dbOverride } = {}) {
       const asset = await db.getAsset(code, issuer);
       if (!asset) return res.status(404).json({ error: "Asset not found" });
       res.json(serializeAsset(asset));
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/assets/:issuer/:code/supply-history?contract_id= — mint/burn
+  // supply series for the asset's SAC contract, with source events and coverage (#1067).
+  app.get("/api/assets/:issuer/:code/supply-history", async (req, res) => {
+    try {
+      const { issuer, code } = req.params;
+      const contractId = req.query.contract_id;
+      if (typeof contractId !== "string" || !/^C[A-Z2-7]{55}$/.test(contractId)) {
+        return res.status(422).json({ error: "Invalid contract_id" });
+      }
+      const asset = await db.getAsset(code, issuer);
+      if (!asset) return res.status(404).json({ error: "Asset not found" });
+      const events = await db.getSupplyEvents(contractId);
+      const history = buildSupplyHistory(events);
+      res.json({ code, issuer, contract_id: contractId, ...history, empty: history.points.length === 0 });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

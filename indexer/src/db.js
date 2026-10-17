@@ -3041,6 +3041,18 @@ export const db = {
     return rows[0] ?? null;
   },
 
+  /** Mint and burn events for a SAC contract, oldest first (#1067). */
+  async getSupplyEvents(contractId) {
+    const { rows } = await pool.query(
+      `SELECT seq, ledger, function, tx_hash, (raw_data::jsonb->>'amount') AS amount
+       FROM events
+       WHERE contract_id = $1 AND function IN ('mint', 'burn')
+       ORDER BY ledger ASC, seq ASC`,
+      [contractId],
+    );
+    return rows;
+  },
+
   /** All issuers that have published an asset with this code (#1066). */
   async getAssetsByCode(code) {
     const { rows } = await pool.query("SELECT code, issuer FROM assets WHERE code = $1 ORDER BY issuer", [code]);
