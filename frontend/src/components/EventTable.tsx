@@ -13,6 +13,7 @@ import { addressRoute, truncateAddress, isAccountAddress, isContractAddress, isM
 import { readFeedScroll, saveFeedScroll } from "../utils/feedViewState";
 import { feedRowHeight, type FeedDensity } from "../utils/feedDensity";
 import { classifyDecodeState, DECODE_STATE_LABELS } from "../utils/decodeState";
+import { txEventOrder, type TxEventOrder } from "../utils/eventOrdering";
 
 /** Stellar strkey address pattern: G.../C.../M... (56+ chars, base32 alphabet) */
 const ADDRESS_RE = /\b([GCM][A-Z2-7]{55,})\b/g;
@@ -218,11 +219,28 @@ const ContractCell = memo(function ContractCell({ contractId, meta }: { contract
 });
 
 /** Render a single event row (extracted so it can be reused in both modes). */
-const EventRow = memo(function EventRow({ ev, contractMeta }: { ev: DecodedEvent; contractMeta?: ContractMeta }) {
+const EventRow = memo(function EventRow({
+  ev,
+  contractMeta,
+  txOrder,
+}: {
+  ev: DecodedEvent;
+  contractMeta?: ContractMeta;
+  txOrder?: TxEventOrder;
+}) {
   return (
     <>
       <td style={td}>
         <Link to={`/event/${ev.seq}`}>#{ev.seq}</Link>
+        {txOrder && (
+          <span
+            data-testid="tx-event-order"
+            title={`Event ${txOrder.position} of ${txOrder.total} in this transaction, ordered by indexer sequence (seq)`}
+            style={{ display: "block", fontSize: 11, color: "var(--muted)" }}
+          >
+            tx {txOrder.position}/{txOrder.total}
+          </span>
+        )}
       </td>
       <td style={td}>{ev.ledger.toLocaleString()}</td>
       <td style={td}>
@@ -349,6 +367,8 @@ export default function EventTable({ events, onReachEnd, scrollKey, density = "c
       retry: false,
     })),
   });
+  // Position of each event within its transaction (#1037), over the loaded events.
+  const txOrderBySeq = useMemo(() => txEventOrder(events), [events]);
   const contractMetaById = useMemo(() => {
     const map = new Map<string, ContractMeta>();
     contractIds.forEach((id, i) => {
@@ -421,7 +441,11 @@ export default function EventTable({ events, onReachEnd, scrollKey, density = "c
               >
                 <tbody>
                   <tr style={{ borderBottom: "1px solid var(--border)", fontSize: density === "compact" ? 12 : undefined }}>
-                    <EventRow ev={item} contractMeta={contractMetaById.get(item.contract_id)} />
+                    <EventRow
+                      ev={item}
+                      contractMeta={contractMetaById.get(item.contract_id)}
+                      txOrder={txOrderBySeq.get(item.seq)}
+                    />
                   </tr>
                 </tbody>
               </table>
