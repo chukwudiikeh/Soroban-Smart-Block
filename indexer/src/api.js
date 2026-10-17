@@ -1,6 +1,7 @@
 import { logger } from "./logger.js";
 import { resolveAssetIdentity } from "./assetIdentity.js";
 import { buildSupplyHistory } from "./assetSupplyHistory.js";
+import { classifyPriceObservation } from "./marketPrice.js";
 import express from "express";
 import http from "http";
 import path from "path";
@@ -2755,6 +2756,18 @@ export function createApi({ logDestination, dbOverride } = {}) {
       const events = await db.getSupplyEvents(contractId);
       const history = buildSupplyHistory(events);
       res.json({ code, issuer, contract_id: contractId, ...history, empty: history.points.length === 0 });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/assets/:issuer/:code/price — latest price with explicit
+  // missing / incomplete / stale / fresh status; never a zero fallback (#1068).
+  app.get("/api/assets/:issuer/:code/price", async (req, res) => {
+    try {
+      const { issuer, code } = req.params;
+      const observation = await db.getLatestAssetPrice(code, issuer);
+      res.json({ code, issuer, ...classifyPriceObservation(observation) });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

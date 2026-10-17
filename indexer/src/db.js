@@ -3053,6 +3053,17 @@ export const db = {
     return rows;
   },
 
+  /** Latest market-data observation for an asset, or null (#1068). */
+  async getLatestAssetPrice(code, issuer) {
+    const { rows } = await pool.query(
+      `SELECT price, observed_at, source FROM asset_price_observations
+       WHERE code = $1 AND issuer = $2
+       ORDER BY observed_at DESC LIMIT 1`,
+      [code, issuer],
+    );
+    return rows[0] ?? null;
+  },
+
   /** All issuers that have published an asset with this code (#1066). */
   async getAssetsByCode(code) {
     const { rows } = await pool.query("SELECT code, issuer FROM assets WHERE code = $1 ORDER BY issuer", [code]);
