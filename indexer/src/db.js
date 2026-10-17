@@ -3064,6 +3064,20 @@ export const db = {
     return rows[0] ?? null;
   },
 
+  /** Token transfers for a contract within [from, to), for counterparty summaries (#1069). */
+  async getTransfersInRange(contractId, from, to) {
+    const { rows } = await pool.query(
+      `SELECT raw_data::jsonb->>'from' AS "from",
+              raw_data::jsonb->>'to'   AS "to",
+              raw_data::jsonb->>'amount' AS amount
+       FROM events
+       WHERE contract_id = $1 AND function = 'transfer'
+         AND created_at >= $2 AND created_at < $3`,
+      [contractId, from, to],
+    );
+    return rows;
+  },
+
   /** All issuers that have published an asset with this code (#1066). */
   async getAssetsByCode(code) {
     const { rows } = await pool.query("SELECT code, issuer FROM assets WHERE code = $1 ORDER BY issuer", [code]);

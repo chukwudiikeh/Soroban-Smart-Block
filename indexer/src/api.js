@@ -2,6 +2,7 @@ import { logger } from "./logger.js";
 import { resolveAssetIdentity } from "./assetIdentity.js";
 import { buildSupplyHistory } from "./assetSupplyHistory.js";
 import { classifyPriceObservation } from "./marketPrice.js";
+import { summarizeCounterparties } from "./transferCounterparties.js";
 import express from "express";
 import http from "http";
 import path from "path";
@@ -2788,6 +2789,35 @@ export function createApi({ logDestination, dbOverride } = {}) {
       const { identities, skipped } = resolveAssetIdentity(candidates);
       const identity = identities.find((i) => i.code === code && i.issuer === issuer);
       res.json({ code, issuer, identity: identity ?? null, skipped });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/tokens/:id/counterparties?from=&to=&limit= — largest senders and
+  // recipients over a time range, with public account links (#1069).
+  app.get("/api/tokens/:id/counterparties", async (req, res) => {
+    try {
+      const contractId = req.params.id;
+      const from = new Date(req.query.from ?? "");
+      const to = new Date(req.query.to ?? "");
+      if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from >= to) {
+        return res.status(422).json({ error: "from and to must be valid dates with from < to" });
+      }
+      let limit = 10;
+      if (req.query.limit !== undefined) {
+        limit = Number(req.query.limit);
+        if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+          return res.status(422).json({ error: "Invalid limit" });
+        }
+      }
+      const rows = await db.getTransfersInRange(contractId, from.toISOString(), to.toISOString());
+      res.json({
+        contract_id: contractId,
+        from: from.toISOString(),
+        to: to.toISOString(),
+        ...summarizeCounterparties(rows, { limit }),
+      });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
