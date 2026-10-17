@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useQueries } from "@tanstack/react-query";
 import { api } from "../api";
 import type { ContractMeta, DecodedEvent } from "../api";
-import { useVirtualList, ROW_HEIGHT } from "../hooks/useVirtualList";
+import { useVirtualList } from "../hooks/useVirtualList";
 import FiatValue from "./FiatValue";
 import AssetLogo from "./AssetLogo";
 import CopyableAddress from "./CopyableAddress";
@@ -11,6 +11,7 @@ import { getGasAlert } from "./GasLimitAlert";
 import ProtocolBadge from "./ProtocolBadge";
 import { addressRoute, truncateAddress, isAccountAddress, isContractAddress, isMuxedAddress } from "../utils/strkey";
 import { readFeedScroll, saveFeedScroll } from "../utils/feedViewState";
+import { feedRowHeight, type FeedDensity } from "../utils/feedDensity";
 
 /** Stellar strkey address pattern: G.../C.../M... (56+ chars, base32 alphabet) */
 const ADDRESS_RE = /\b([GCM][A-Z2-7]{55,})\b/g;
@@ -84,6 +85,8 @@ interface Props {
   onReachEnd?: () => void;
   /** Filter query string used to remember and restore the scroll offset (#1034). */
   scrollKey?: string;
+  /** Row density (#1035). Defaults to comfortable. */
+  density?: FeedDensity;
 }
 
 const FunctionBadge = memo(function FunctionBadge({ fn, isClassic }: { fn: string; isClassic?: boolean }) {
@@ -305,9 +308,10 @@ const EventRow = memo(function EventRow({ ev, contractMeta }: { ev: DecodedEvent
   );
 });
 
-export default function EventTable({ events, onReachEnd, scrollKey }: Props) {
+export default function EventTable({ events, onReachEnd, scrollKey, density = "comfortable" }: Props) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const { totalHeight, visibleItems } = useVirtualList(events, scrollContainerRef);
+  const rowHeight = feedRowHeight(density);
+  const { totalHeight, visibleItems } = useVirtualList(events, scrollContainerRef, rowHeight);
   const navigate = useNavigate();
   const restoredRef = useRef(false);
   const hasRows = events.length > 0;
@@ -354,7 +358,7 @@ export default function EventTable({ events, onReachEnd, scrollKey }: Props) {
 
   return (
     <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse" }} data-density={density}>
         <thead>
           <tr
             style={{
@@ -383,7 +387,7 @@ export default function EventTable({ events, onReachEnd, scrollKey }: Props) {
         onScroll={(event) => {
           const target = event.currentTarget;
           if (scrollKey) saveFeedScroll(scrollKey, target.scrollTop);
-          if (onReachEnd && target.scrollTop + target.clientHeight >= target.scrollHeight - ROW_HEIGHT * 4) {
+          if (onReachEnd && target.scrollTop + target.clientHeight >= target.scrollHeight - rowHeight * 4) {
             onReachEnd();
           }
         }}
@@ -407,7 +411,7 @@ export default function EventTable({ events, onReachEnd, scrollKey }: Props) {
                 }}
               >
                 <tbody>
-                  <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                  <tr style={{ borderBottom: "1px solid var(--border)", fontSize: density === "compact" ? 12 : undefined }}>
                     <EventRow ev={item} contractMeta={contractMetaById.get(item.contract_id)} />
                   </tr>
                 </tbody>
