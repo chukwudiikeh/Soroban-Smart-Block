@@ -12,6 +12,7 @@ import ProtocolBadge from "./ProtocolBadge";
 import { addressRoute, truncateAddress, isAccountAddress, isContractAddress, isMuxedAddress } from "../utils/strkey";
 import { readFeedScroll, saveFeedScroll } from "../utils/feedViewState";
 import { feedRowHeight, type FeedDensity } from "../utils/feedDensity";
+import { classifyDecodeState, DECODE_STATE_LABELS } from "../utils/decodeState";
 
 /** Stellar strkey address pattern: G.../C.../M... (56+ chars, base32 alphabet) */
 const ADDRESS_RE = /\b([GCM][A-Z2-7]{55,})\b/g;
@@ -239,15 +240,23 @@ const EventRow = memo(function EventRow({ ev, contractMeta }: { ev: DecodedEvent
           whiteSpace: "nowrap",
         }}
       >
-        {ev.decode_status && ev.decode_status !== "verified" && (
-          <span
-            className="badge"
-            title={ev.decode_warnings?.join(", ") || "This description was not verified against the contract ABI"}
-            style={{ marginRight: 6, color: "var(--yellow, #f59e0b)" }}
-          >
-            {ev.decode_status === "heuristic" ? "Heuristic" : "Unverified"}
-          </span>
-        )}
+        {(() => {
+          // Distinguish why decoding fell short (#1036) instead of one generic badge.
+          const state = classifyDecodeState(ev);
+          if (state === "decoded") return null;
+          const { label, title } = DECODE_STATE_LABELS[state];
+          const warnings = ev.decode_warnings?.join(", ");
+          return (
+            <span
+              className="badge"
+              data-decode-state={state}
+              title={warnings ? `${title}: ${warnings}` : title}
+              style={{ marginRight: 6, color: "var(--yellow, #f59e0b)" }}
+            >
+              {label}
+            </span>
+          );
+        })()}
         {ev.is_clawback && (
           <span className="badge clawback" style={{ marginRight: 6 }} title="Mandatory authority intervention">
             ⚠ COMPLIANCE: CLAWBACK
