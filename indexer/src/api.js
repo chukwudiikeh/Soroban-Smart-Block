@@ -1,4 +1,8 @@
 import { logger } from "./logger.js";
+import { resolveAssetIdentity } from "./assetIdentity.js";
+import { buildSupplyHistory } from "./assetSupplyHistory.js";
+import { classifyPriceObservation } from "./marketPrice.js";
+import { summarizeCounterparties } from "./transferCounterparties.js";
 import express from "express";
 import http from "http";
 import path from "path";
@@ -2734,6 +2738,86 @@ export function createApi({ logDestination, dbOverride } = {}) {
       const asset = await db.getAsset(code, issuer);
       if (!asset) return res.status(404).json({ error: "Asset not found" });
       res.json(serializeAsset(asset));
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/assets/:issuer/:code/supply-history?contract_id= — mint/burn
+  // supply series for the asset's SAC contract, with source events and coverage (#1067).
+  app.get("/api/assets/:issuer/:code/supply-history", async (req, res) => {
+    try {
+      const { issuer, code } = req.params;
+      const contractId = req.query.contract_id;
+      if (typeof contractId !== "string" || !/^C[A-Z2-7]{55}$/.test(contractId)) {
+        return res.status(422).json({ error: "Invalid contract_id" });
+      }
+      const asset = await db.getAsset(code, issuer);
+      if (!asset) return res.status(404).json({ error: "Asset not found" });
+      const events = await db.getSupplyEvents(contractId);
+      const history = buildSupplyHistory(events);
+      res.json({ code, issuer, contract_id: contractId, ...history, empty: history.points.length === 0 });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/assets/:issuer/:code/price — latest price with explicit
+  // missing / incomplete / stale / fresh status; never a zero fallback (#1068).
+  app.get("/api/assets/:issuer/:code/price", async (req, res) => {
+    try {
+      const { issuer, code } = req.params;
+      const observation = await db.getLatestAssetPrice(code, issuer);
+      res.json({ code, issuer, ...classifyPriceObservation(observation) });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/assets/:issuer/:code/identity — identity evidence for a classic
+  // asset. Same-code assets from other issuers are listed but never merged (#1066).
+  app.get("/api/assets/:issuer/:code/identity", async (req, res) => {
+    try {
+      const { issuer, code } = req.params;
+      const asset = await db.getAsset(code, issuer);
+      if (!asset) return res.status(404).json({ error: "Asset not found" });
+      const others = await db.getAssetsByCode(code);
+      const candidates = [
+        { code, issuer, source: "assets_registry" },
+        ...others.map((row) => ({ code: row.code, issuer: row.issuer, source: "assets_registry" })),
+      ];
+      const { identities, skipped } = resolveAssetIdentity(candidates);
+      const identity = identities.find((i) => i.code === code && i.issuer === issuer);
+      res.json({ code, issuer, identity: identity ?? null, skipped });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/tokens/:id/counterparties?from=&to=&limit= — largest senders and
+  // recipients over a time range, with public account links (#1069).
+  app.get("/api/tokens/:id/counterparties", async (req, res) => {
+    try {
+      const contractId = req.params.id;
+      const from = new Date(req.query.from ?? "");
+      const to = new Date(req.query.to ?? "");
+      if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from >= to) {
+        return res.status(422).json({ error: "from and to must be valid dates with from < to" });
+      }
+      let limit = 10;
+      if (req.query.limit !== undefined) {
+        limit = Number(req.query.limit);
+        if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+          return res.status(422).json({ error: "Invalid limit" });
+        }
+      }
+      const rows = await db.getTransfersInRange(contractId, from.toISOString(), to.toISOString());
+      res.json({
+        contract_id: contractId,
+        from: from.toISOString(),
+        to: to.toISOString(),
+        ...summarizeCounterparties(rows, { limit }),
+      });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
