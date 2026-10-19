@@ -3091,6 +3091,49 @@ export const db = {
     return rows[0] ?? null;
   },
 
+  /** Mint and burn events for a SAC contract, oldest first (#1067). */
+  async getSupplyEvents(contractId) {
+    const { rows } = await pool.query(
+      `SELECT seq, ledger, function, tx_hash, (raw_data::jsonb->>'amount') AS amount
+       FROM events
+       WHERE contract_id = $1 AND function IN ('mint', 'burn')
+       ORDER BY ledger ASC, seq ASC`,
+      [contractId],
+    );
+    return rows;
+  },
+
+  /** Latest market-data observation for an asset, or null (#1068). */
+  async getLatestAssetPrice(code, issuer) {
+    const { rows } = await pool.query(
+      `SELECT price, observed_at, source FROM asset_price_observations
+       WHERE code = $1 AND issuer = $2
+       ORDER BY observed_at DESC LIMIT 1`,
+      [code, issuer],
+    );
+    return rows[0] ?? null;
+  },
+
+  /** Token transfers for a contract within [from, to), for counterparty summaries (#1069). */
+  async getTransfersInRange(contractId, from, to) {
+    const { rows } = await pool.query(
+      `SELECT raw_data::jsonb->>'from' AS "from",
+              raw_data::jsonb->>'to'   AS "to",
+              raw_data::jsonb->>'amount' AS amount
+       FROM events
+       WHERE contract_id = $1 AND function = 'transfer'
+         AND created_at >= $2 AND created_at < $3`,
+      [contractId, from, to],
+    );
+    return rows;
+  },
+
+  /** All issuers that have published an asset with this code (#1066). */
+  async getAssetsByCode(code) {
+    const { rows } = await pool.query("SELECT code, issuer FROM assets WHERE code = $1 ORDER BY issuer", [code]);
+    return rows;
+  },
+
   async upsertAsset({ code, issuer, name, domain, logo_url, decimals }) {
     const { rows } = await pool.query(
       `INSERT INTO assets (code, issuer, name, domain, logo_url, decimals)
